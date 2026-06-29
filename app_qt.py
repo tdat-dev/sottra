@@ -32,7 +32,9 @@ except Exception:
 
 import ctypes.wintypes
 
-from PySide6.QtCore import Qt, QTimer, QRectF, QByteArray, QObject, Signal, QFileInfo
+from PySide6.QtCore import (
+    Qt, QTimer, QRectF, QByteArray, QObject, Signal, QFileInfo, QSize,
+)
 from PySide6.QtGui import (
     QPainter, QColor, QLinearGradient, QPainterPath, QPen, QPixmap, QIcon,
     QGuiApplication,
@@ -47,6 +49,7 @@ from engine import SttEngine
 # ---------- hằng số thiết kế ----------
 WIN_W, WIN_H = 184, 52
 MARGIN = 6                       # lề trong suốt quanh pill
+ICON_PX = 18                     # cạnh icon (mic / app) vẽ trên pill, đơn vị logical
 N = 17                           # số thanh sóng
 MIN_H, MAX_H = 2.0, 22.0
 G1 = QColor(0xF6, 0xC4, 0x55)    # vàng sáng
@@ -223,14 +226,22 @@ class Pill(QWidget):
             pass
 
     def _icon_for(self, path):
-        """QPixmap icon của 1 .exe (cache theo đường dẫn). None nếu không lấy được."""
+        """QPixmap icon của 1 .exe, scale sắc nét đúng kích thước vẽ (cache theo path).
+
+        Lấy variant gốc lớn nhất (shell cấp tới 128px) rồi thu nhỏ MỘT lần về
+        kích thước hiển thị thật (ICON_PX × devicePixelRatio) bằng SmoothTransformation
+        -> tránh phóng-rồi-thu 2 lần làm icon vỡ. None nếu không lấy được.
+        """
         if path not in self._icon_cache:
             pm = None
             try:
-                qi = self._iconprov.icon(QFileInfo(path))
-                p = qi.pixmap(64, 64)
-                if not p.isNull():
-                    pm = p
+                dpr = self.devicePixelRatioF() or 1.0
+                target = max(1, round(ICON_PX * dpr))
+                big = self._iconprov.icon(QFileInfo(path)).pixmap(QSize(128, 128))
+                if not big.isNull():
+                    pm = big.scaled(target, target, Qt.KeepAspectRatio,
+                                    Qt.SmoothTransformation)
+                    pm.setDevicePixelRatio(dpr)
             except Exception:
                 pm = None
             self._icon_cache[path] = pm
@@ -288,7 +299,7 @@ class Pill(QWidget):
             p.drawPath(ip)
 
         cy = rect.center().y()
-        icon = 17.0
+        icon = float(ICON_PX)
         ix = rect.left() + 14
         # pulse nhẹ khi recording
         scale = 1.0 + (0.06 * math.sin(self.t * 3) if self.state == "recording" else 0.0)
@@ -307,7 +318,8 @@ class Pill(QWidget):
             p.restore()
         elif self.app_icon is not None:            # icon app đang focus
             p.setRenderHint(QPainter.SmoothPixmapTransform, True)
-            p.drawPixmap(icon_rect, self.app_icon, QRectF(self.app_icon.rect()))
+            pm = self.app_icon
+            p.drawPixmap(icon_rect, pm, QRectF(0, 0, pm.width(), pm.height()))
         else:                                      # fallback: mic
             self.mic.render(p, icon_rect)
 
