@@ -1,0 +1,123 @@
+/* ============================================================
+   Sottra — floating voice pill v3
+   Lozenge cao, gradient chiều sâu, waveform vàng. Theme: dark.
+   Window solid (#0c0c11) + SetWindowRgn bo tròn -> KHÔNG transparency,
+   KHÔNG viền trắng. Mọi chiều sâu nằm BÊN TRONG pill.
+   ============================================================ */
+:root {
+  --bg-top: #17171f;
+  --bg-bot: #0c0c11;
+  --muted:  #8a8a93;
+  --g1: #f6c455;        /* vàng sáng */
+  --g2: #e0a030;        /* vàng đậm */
+  --danger: #e5705f;
+  --ease: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  width: 100%; height: 100%;
+  background: var(--bg-bot);          /* trùng đáy pill */
+  overflow: hidden;
+  user-select: none;
+  font-family: -apple-system, "Segoe UI", system-ui, sans-serif;
+}
+
+/* ---------- Pill ---------- */
+.pill {
+  position: absolute; inset: 0;       /* lấp đầy window (window đã được bo tròn) */
+  display: flex; align-items: center; gap: 11px;
+  padding: 0 16px;
+  border-radius: 0;                   /* DWM bo góc window -> CSS để vuông, hết khung góc nhọn */
+  overflow: hidden;
+  background: linear-gradient(180deg, var(--bg-top), var(--bg-bot));
+  transition: box-shadow 0.35s var(--ease);
+}
+/* vầng amber dịu góc trên-trái -> chiều sâu */
+.pill::before {
+  content: ""; position: absolute; inset: 0; border-radius: inherit;
+  pointer-events: none;
+  background: radial-gradient(120% 140% at 16% 30%, rgba(246,196,85,0.10), transparent 58%);
+}
+body[data-state="recording"] .pill {
+  box-shadow: inset 0 0 16px rgba(246,196,85,0.16);   /* glow nhẹ, KHÔNG viền rim */
+}
+
+/* ---------- Icon mic (nút toggle) ---------- */
+.icon {
+  position: relative; z-index: 1; flex: 0 0 auto;
+  width: 17px; height: 17px;
+  display: grid; place-items: center;
+  background: none; border: none; padding: 0; cursor: pointer;
+  color: var(--muted);
+}
+.ic {
+  position: absolute; width: 17px; height: 17px;
+  color: var(--muted); opacity: 0;
+  transition: opacity 0.25s var(--ease), color 0.25s var(--ease);
+}
+.ic-mic { opacity: 1; }
+body[data-state="idle"]      .ic-mic   { color: var(--g1); opacity: 1; }
+body[data-state="recording"] .ic-mic   { color: var(--g1); opacity: 1; }
+body[data-state="recording"] .icon     { animation: pulse 1.4s var(--ease) infinite; }
+body[data-state="transcribing"] .ic-mic { opacity: 0; }
+body[data-state="transcribing"] .ic-spin { opacity: 1; color: var(--g1); }
+body[data-state="done"] .ic-mic   { opacity: 0; }
+body[data-state="done"] .ic-check { opacity: 1; color: var(--g1); }
+body[data-state="loading"] .ic-mic { color: var(--muted); opacity: 0.45; }
+
+@media (prefers-reduced-motion: no-preference) {
+  body[data-state="transcribing"] .ic-spin { animation: spin 0.9s linear infinite; }
+  body[data-state="loading"]      .icon    { animation: pulse 1.2s var(--ease) infinite; }
+}
+@keyframes spin  { to { transform: rotate(360deg); } }
+@keyframes pulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.1); } }
+
+/* ---------- Wave ---------- */
+.wave {
+  position: relative; z-index: 1;
+  flex: 1 1 auto;
+  height: 26px;
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 2px;
+}
+.baseline {
+  position: absolute; left: 0; right: 0;
+  height: 2px; border-radius: 2px;
+  background: linear-gradient(90deg, transparent, rgba(246,196,85,0.5), transparent);
+  opacity: 0;
+  transition: opacity 0.3s var(--ease);
+}
+.bar {
+  flex: 1 1 auto; min-width: 2px;
+  height: 2px; border-radius: 2px;
+  background: var(--g1);
+  will-change: height;
+}
+body[data-state="idle"] .baseline { opacity: 1; }
+body[data-state="idle"] .bar      { opacity: 0; }
+body[data-state="recording"] .bar { background: linear-gradient(180deg, var(--g1), var(--g2)); }
+body[data-state="transcribing"] .bar { background: rgba(246,196,85,0.60); }
+body[data-state="loading"] .bar   { opacity: 0; }
+body[data-state="loading"] .baseline { opacity: 0.4; }
+
+/* ---------- Close (hiện khi hover) ---------- */
+.close {
+  position: absolute; z-index: 2; top: 5px; right: 7px;
+  width: 16px; height: 16px;
+  display: grid; place-items: center;
+  background: rgba(255,255,255,0.06);
+  border-radius: 50%;
+  color: var(--muted); cursor: pointer;
+  opacity: 0; transform: scale(0.8);
+  transition: opacity 0.18s var(--ease), transform 0.18s var(--ease),
+              color 0.18s var(--ease), background 0.18s var(--ease);
+}
+.close svg { width: 10px; height: 10px; }
+.pill:hover .close { opacity: 1; transform: scale(1); }
+.close:hover { color: var(--danger); background: rgba(229,112,95,0.16); }
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation: none !important; }
+}
