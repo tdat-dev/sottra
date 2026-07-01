@@ -45,6 +45,24 @@ def _is_hallucination(text):
     return any(p in t for p in _HALLUC_PHRASES)
 
 
+# Prompt dọn chính tả: CHỈ thêm dấu/sửa dấu câu, GIỮ NGUYÊN từ (không bịa/đổi/dịch).
+# Ít-shot để model bám đúng hành vi (đã test: llama-3.3-70b trung thực, ~0.5s).
+_REFINE_SYS = (
+    "Bạn là bộ THÊM DẤU và sửa chính tả tiếng Việt cho văn bản nhận dạng giọng nói.\n"
+    "QUY TẮC:\n"
+    "- Chỉ thêm/sửa DẤU THANH, DẤU CÂU và VIẾT HOA.\n"
+    "- GIỮ NGUYÊN từng từ: KHÔNG thay từ này bằng từ khác, KHÔNG thêm/bớt từ, KHÔNG dịch.\n"
+    "- Giữ nguyên từ tiếng Anh (Hello, AI, email...).\n"
+    "- Nếu một từ nghe vô nghĩa, CỨ GIỮ NGUYÊN, không đoán từ khác.\n"
+    "- Chỉ trả về đúng văn bản, không giải thích.\n"
+    "Ví dụ:\n"
+    "vào: hôm nay minh gưi email cho khach hang\n"
+    "ra: Hôm nay mình gửi email cho khách hàng\n"
+    "vào: Hello đây la ban thu AI\n"
+    "ra: Hello, đây là bản thu AI"
+)
+
+
 # Tên hotkey người dùng chọn -> pynput Key
 HOTKEYS = {
     "alt_r": keyboard.Key.alt_r,
@@ -96,6 +114,8 @@ class SttEngine:
         self.groq_api_key = _c["groq_api_key"]
         self.groq_model = _c["groq_model"]
         self.groq_prompt = _c["groq_prompt"]
+        self.refine = _c["refine"]              # dọn chính tả bằng LLM sau khi chép
+        self.refine_model = _c["refine_model"]
 
         self._cur_level = 0.0
         self._pump = None
@@ -145,6 +165,13 @@ class SttEngine:
         cfg["groq_model"] = model
         config.save(cfg)
         self.emit("device", self._label())
+
+    def set_refine(self, on):
+        """Bật/tắt dọn chính tả bằng LLM, lưu cấu hình."""
+        self.refine = bool(on)
+        cfg = config.load()
+        cfg["refine"] = self.refine
+        config.save(cfg)
 
     # ----------------------- Thu âm (RAM) -----------------------
     def _audio_callback(self, indata, frames, time_info, status):
@@ -259,6 +286,9 @@ class SttEngine:
             self.emit("state", "idle")
             return
 
+        if self.refine:                        # LLM dọn dấu/chính tả (giữ "transcribing")
+            text = self._refine_text(text)
+
         self._deliver(text)
         self.emit("result", {"text": text, "time": time.strftime("%H:%M")})
         self.emit("state", "idle")
@@ -325,6 +355,44 @@ class SttEngine:
         with urllib.request.urlopen(req, timeout=60) as resp:
             data = _json.loads(resp.read().decode("utf-8"))
         return (data.get("text") or "").strip()
+
+    def _refine_text(self, text):
+        """Nhờ LLM Groq dọn dấu/chính tả tiếng Việt. MỌI lỗi -> trả text gốc
+        (không bao giờ để bước dọn làm hỏng/chậm treo kết quả)."""
+        import json as _json
+        import re
+        import urllib.request
+        try:
+            body = _json.dumps({
+                "model": self.refine_model,
+                "temperature": 0,
+                "max_tokens": 600,
+                "messages": [
+                    {"role": "system", "content": _REFINE_SYS},
+                    {"role": "user", "content": text},
+                ],
+            }).encode("utf-8")
+            req = urllib.request.Request(
+                "https://api.groq.com/openai/v1/chat/completions",
+                data=body, method="POST",
+                headers={
+                    "Authorization": f"Bearer {self.groq_api_key}",
+                    "Content-Type": "application/json",
+                    "User-Agent": "Sottra/1.0",
+                },
+            )
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                data = _json.loads(resp.read().decode("utf-8"))
+            out = data["choices"][0]["message"]["content"] or ""
+            out = re.sub(r"<think>.*?</think>", "", out, flags=re.S)  # model reasoning (nếu có)
+            out = out.strip().strip('"').strip()
+            # An toàn: rỗng hoặc dài bất thường (model "nói thêm") -> giữ bản gốc
+            if not out or len(out) > len(text) * 2.5 + 40:
+                return text
+            return out
+        except Exception as e:
+            print(f"[refine] bỏ qua: {e}", file=sys.stderr, flush=True)
+            return text
 
     def _deliver(self, text):
         """Gõ tại con trỏ, hoặc copy clipboard, tuỳ output_mode."""

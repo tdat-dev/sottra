@@ -244,6 +244,12 @@ class Pill(QWidget):
         self.act_fast.setCheckable(True)
         self._refresh_model_menu()
 
+        # Dọn dấu/chính tả tiếng Việt bằng LLM sau khi chép (+~0.5s)
+        self.refine_action = self.menu.addAction(
+            "Dọn chính tả bằng AI", self._toggle_refine)
+        self.refine_action.setCheckable(True)
+        self.refine_action.setChecked(self.engine.refine)
+
         # Nhận dạng qua Groq (đám mây) -> cần API key (miễn phí ở console.groq.com)
         self.key_action = self.menu.addAction("Nhập Groq API key…", self._enter_groq_key)
         self._refresh_key_action()
@@ -290,6 +296,12 @@ class Pill(QWidget):
         self._notify("Nhận dạng: "
                      + ("Chính xác (large-v3)" if not model.endswith("turbo")
                         else "Nhanh (turbo)"), 2500)
+
+    def _toggle_refine(self):
+        on = self.refine_action.isChecked()
+        self.engine.set_refine(on)
+        self._notify("Bật dọn chính tả bằng AI (+~0.5s)." if on
+                     else "Tắt dọn chính tả bằng AI.", 2500)
 
     # ---------------- Groq API key ----------------
     def _refresh_key_action(self):

@@ -16,6 +16,8 @@ DEFAULTS = {
     "groq_api_key": "",
     "groq_model": "whisper-large-v3",         # chuẩn hơn cho tiếng Việt (turbo nhanh nhưng kém dấu)
     "groq_prompt": "",                        # gợi ý từ vựng/tên riêng để chép đúng hơn
+    "refine": True,                           # LLM dọn dấu/chính tả tiếng Việt sau khi chép (+~0.5s)
+    "refine_model": "llama-3.3-70b-versatile",  # nhanh + trung thực (không bịa/đổi từ)
     "installed": False,                       # đã tạo lối tắt + bật startup lần đầu chưa
 }
 
